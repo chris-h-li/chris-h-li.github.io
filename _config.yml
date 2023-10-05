@@ -4,11 +4,10 @@ description: > # your text below (remove <br> elements if you don't need line br
   I'm an MS in Statistics student at UC Davis and will graduate in December 2023. I am in interested applying statistical and machine learning models 
   to answer interesting questions in healthcare, biology, and professional sports. This website contains projects I have done as part of my MS degree
   and in my free time.
-  I have completed several other projects from my 3+ years of work experience at Cornerstone Research and Takeda (see CV),
+  I have completed several other projects from my 3+ years of work experience at Cornerstone Research and Takeda,
   which are not presented here for confidentiality reasons.
   <br><br>
-  <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a> 
-  <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">CV</a> 
+  <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a>
   
 remote_theme: pages-themes/minimal@v0.2.0
 plugins:
