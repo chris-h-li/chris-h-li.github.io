@@ -1,6 +1,6 @@
 
 ---
-title: "STA 222 Midterm"
+title: "Evaluating the Effect of Body Washing Using Chlorhexidine Gluconate on Infection Risk for Burn Patients"
 author: "Christopher Li"
 output: html_document
 ---
