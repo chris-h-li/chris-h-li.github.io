@@ -1,8 +1,14 @@
 title: Christopher Li # your name (or website title) here
 logo: "/images/profile_pic.jpg?raw=true" # your photo (or logo) here
 description: > # your text below (remove <br> elements if you don't need line breaks)
-  I'm a Master's in Statistics student at UC Davis and will graduate in December 2023. I am in interested applying statistical methods
-  and machine learning models to answer interesrting research questions in healthcare, biology, and professional sports.
+  I'm an MS in Statistics student at UC Davis and will graduate in December 2023. I am in interested applying statistical methods
+  and machine learning models to answer interesting research questions in healthcare, biology, and professional sports. This website contains
+  projects from my Master's degree coursework as well as personal projects I have done for fun.
+  <br><br>
+  This past summer 2023, I worked as a statistics intern at Takeda Pharamceuticals, where I developed R and SAS programs to perform numerical optimization
+  and Monte Carlo simulations to evalute the benefit-risk profile of a treatment. Prior to my MS degree, I worked for three years at Cornerstone Research
+  where I analyzed financial and healthcare datasets and performed statistical analyses such as regressions, conjoint analyses, and Monte Carlo simulations.
+  Unfortunately, I am unable to showcase my work from these experiences due to the confidentiality of the data I was working with.
   <br><br>
   <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a> 
   
