@@ -1,11 +1,13 @@
 title: Christopher Li # your name (or website title) here
 logo: "/images/profile_pic.jpg?raw=true" # your photo (or logo) here
 description: > # your text below (remove <br> elements if you don't need line breaks)
-  First description 
+  I'm an MS in Statistics student at UC Davis and will graduate in December 2023. I am in interested applying statistical methods
+  and machine learning models to answer interesting research questions in healthcare, biology, and professional sports. This website contains
+  projects from my MS degree coursework as well as personal projects I have done.
+  I am unable to showcase projects from my 3+ years of work experience at Cornerstone Research and Takeda Pharmaceuticals
+  due to the confidentiality of the data I was working with.
   <br><br>
-  Second description 
-  <br><br>
-  <a href="https://www.linkedin.com/in/example/">View My LinkedIn Profile</a> 
+  <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a> 
   
 remote_theme: pages-themes/minimal@v0.2.0
 plugins:
