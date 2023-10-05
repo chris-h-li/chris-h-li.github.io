@@ -15,7 +15,7 @@
 
 ### Biostatistics Projects Using R
 
-[Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice](/https://chris-h-li.github.io/project-html-files/neural_activity_in_mice_project.html)
+[Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice](/project-html-files/neural_activity_in_mice_project.html)
 <img src="images/dummy_thumbnail.jpg?raw=true"/>
 
 
