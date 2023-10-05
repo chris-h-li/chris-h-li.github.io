@@ -22,5 +22,5 @@
 
 
 ---
-<p style="font-size:11px"></a></p>
+<p style="font-size:11px"></p>
 <!-- Remove above link if you don't want to attibute -->
