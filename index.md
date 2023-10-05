@@ -4,8 +4,7 @@
 
 ### Sports Analytics Projects Using Python
 
-[Clustering and Prediction of NBA Player Performance:
-A Machine Learning Approach](/pdf/nba_prediction_project.pdf)
+[Clustering and Prediction of NBA Player Performance: A Machine Learning Approach](/pdf/nba_prediction_project.pdf)
 <img src="images/nba_thumbnail.jpg?raw=true"/>
 
 ---
