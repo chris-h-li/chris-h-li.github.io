@@ -4,12 +4,9 @@
 
 ### Sports Analytics Projects Using Python
 
-[Project 1 Title](/sample_page)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
-
----
-[Project 2 Title](/pdf/sample_presentation.pdf)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+[Clustering and Prediction of NBA Player Performance:
+A Machine Learning Approach](/pdf/nba_prediction_project.pdf)
+<img src="images/nba_thumbnail.jpg?raw=true"/>
 
 ---
 
