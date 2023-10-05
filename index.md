@@ -15,13 +15,13 @@
 
 ### Biostatistics Projects Using R
 
-[Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice](/project_html_files/neural_activity_in_mice_project.html)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+[Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice](/html/neural_activity_in_mice_project.html)
+<img src="images/neural_thumbnail.jpg?raw=true"/>
 
 ---
 [Evaluating the Effect of Body Washing Using Chlorhexidine
-Gluconate on Infection Risk for Burn Patients](/project_html_files/survival_analysis_burn_patients_project.pdf)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+Gluconate on Infection Risk for Burn Patients](/pdf/survival_analysis_burn_patients_project.pdf)
+<img src="images/survival_thumbnail.jpg?raw=true"/>
 
 
 ---
