@@ -1,0 +1,849 @@
+---
+title: "Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice"
+author: "Christopher Li"
+output: html_document
+---
+
+# Abstract
+
+This analysis uses data from an experiment done by Steinmetz et al. (2019) in order to investigate how neurons in the visual cortex of mice respond to visual stimuli presented to them on the left and right. The dataset I use only includes neuron spike trains specifically from the visual cortex. Moreover, the data only covers sessions 1 to 5 which include two different mice. Exploratory data analysis informs my model selection and my choice of using mean firing rate to measure neural activity. I use a mixed effects ANOVA model that controls for session random effects for my inferential analysis. This model demonstrates that while higher left or right stimuli contrast is generally associated with higher neural activity, neural activity is sometimes higher when only one of the two stimuli are turned on, compared to when both stimuli are turned on but one is at a low contrast. Furthermore, left and right stimuli do not have additive effects on neural responses, due to the presence of interaction effects.  This result is confirmed by two sensitivities: one that uses a different measure of neural activity, and another that address dependencies in the error terms of the model. Furthermore, a logistic regression model is developed to predict trial outcomes based on stimuli, session number, neural activity, and trial sequence within a session.
+
+
+# Introduction
+
+In this project, I analyze a subset of data from an experiment done by Steinmetz et al. (2019) which was intended to evaluate how neural activity is related to vision, choice, action, and behavioral engagement of a mouse. This experiment involved inserting probes into different regions of multiple mice's brains, exposing these mice to visual stimuli, having the mice perform a discrimination task, and analyzing neural activity of the mice as they reacted to the stimuli and performed the task over multiple trials in different sessions. Steinmetz et al. (2019) were interested in studying neural activity across many brain regions. However, this analysis will specifically focus on studying neural activity in the visual cortex.
+
+The purpose of my project is twofold. The main goal is to investigate how neurons in the visual cortex respond to visual stimuli presented to the mice. More specifically, I also examine whether or not the effects of the two visual stimuli on neural activity in the visual cortex are additive. I carry out this analysis using descriptive analyses and a mixed effects ANOVA model that controls for the effects of different sessions. Furthermore, I conduct various statistical tests, model diagnostics, and perform sensitivities to evaluate the robustness of my conclusions.
+
+The second goal of my project is to develop a model to predict whether or not the mouse successfully performed the discrimination task. I leverage data on the visual stimuli presented, the activity of neurons in the visual cortex, and other variables to execute this prediction task. Using stepwise regression, I land on a final logistic regression model and test its predictive performance on the first 100 trials in session 1. The findings from my analysis can provide some insight into how mice's brains react to visual stimuli and how well neural activity, among other factors, can be used to predict mice performance on certain tasks.
+
+# Background
+
+Before diving into the analysis, I first give more background about the experiment administered by Steinmetz et al. (2019) based on their paper. The experiment was executed across 39 sessions that included 10 different mice. Each session contained several hundred trials, and during each trial there were screens on the left and right of the mouse that had stimuli with varying levels of contrast. The contrast level options were 0, 0.25, 0.5, and 1, where 0 represented no stimuli being shown on the screen. The levels of left and right stimuli or lack thereof in each trial was randomly chosen. After being exposed to the stimuli, the mice then had the opportunity to turn a wheel using their forepaws in response. The mice earned a reward, in the form of water, if they turned the wheel in the direction of the stimuli with the higher contrast. When both stimuli had the same contrast, then the mice were rewarded with probability 50%, regardless if they turned the wheel left or right. When neither screen had any stimuli, the mice were rewarded if they did not turn the wheel for 1.5 seconds from the start of the trial.
+
+Data on the activity of neurons was collected using Neuropixels probes, where two or three probes were implanted in the mouse's brain during any given session (Steinmetz et al., 2019). The location of the probe implants varied from session to session, and therefore the set of neurons studied varies from session to session. Overall across all sessions, these probes collected data on 30,000 neurons across 42 different brain regions (Steinmetz et al., 2019). This data is collected in the form of spike trains, which indicate the time intervals during which each neuron fired.
+
+Given the limited scope of this analysis, I only use a subset of the experiment's full dataset. I only use data from Sessions 1 to 5 containing two different mice, Cori and Frossman, and I only analyze data on neural activity in the visual cortex of the mouse brain. Moreover, this analysis only uses spike train data from the onset of stimuli until 0.4 seconds afterwards.
+
+# Quantifying Neural Activity
+
+Since one of the primary objectives of this project is to understand how neural activity in the visual cortex is modulated by the two stimuli, it is important to determine how to quantify the neural activity in the visual cortex, based on the data we have access to. Within each trial in each session, we have data on spikes trains in 0.01 second intervals for each neuron. For a given neuron and time interval, we have a binary value of 1 or 0 representing whether a neuron fired during that interval. The goal would be to quantify this neural activity data at the trial level, since the other information such as the contrast of left and right stimuli are also at the trial level. This means we have to collapse the full data we have by neuron and by time interval.
+
+Collapsing by time interval is straightforward, since we can calculate the number of spikes per second for a given neuron. Collapsing in this way makes sense, since we do not care about when neurons fired in the total 0.4 second interval for which we have data, but we just care about the frequency with which a neuron fired.
+
+To collapse across neurons, I take the average of the spikes per second across all neurons in a trial. This average weights all neurons equally and doesn't differentiate between types of neurons. This seems like a reasonable assumption to make, especially given that the focus of this report is on statistical methods rather than neurological theory. Given this assumption, this analysis will characterize the effects of left and right stimuli on neural activity across all types of neurons. Taking the mean firing rate helps us quantify neuron activity at the trial level, which is important for my ANOVA analysis. I believe taking the mean is preferable to other summary statistics for the following reasons:
+
+1.  Taking the average is preferable to taking the sum of spikes per second across neurons. This is because trials in different sessions have different number of neurons, so using a sum would not be comparable across sessions. Meanwhile, an average produces a comparable measure for trials with different numbers of neurons.
+
+2.  Using a mean seems preferable to using a measure like median or quantile, because it is fair to assume we are interested in collectively using information on the firing rate for all neurons. Using a measure such as a median or quantile of firing rates could fail to holistically represent the behavior of all neurons, especially when the distributions of firing rates across neurons have outliers and vary a lot across different trials.
+
+3.  Averaging firing rate across neurons is a procedure that Steinmetz et al. (2019) also do when analyzing spike train data in Figure 2 of their paper, providing further evidence of using this measure.
+
+Below, I conduct some exploratory analysis on this mean firing rate measure, as well as on neural activity across neurons.
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = 'C:/Users/Chris Li/Documents/UC Davis/STA 207/Data', warning = FALSE, message = FALSE)
+```
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+library(gplots)
+library(purrr)
+library(pander)
+library(lme4)
+library(lmerTest)
+library(glue)
+library("ggplot2")
+library(car)
+library(MASS)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(gt)
+library(gridExtra)
+library(pROC)
+
+```
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# import experiment data
+session = list()
+session_files=list.files() %>%
+  .[grepl("session", .)]
+
+for(i in seq_along(session_files)){
+  session[[i]]=readRDS(session_files[[i]])
+}
+
+```
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# get trial level dataset
+session_to_tbl <- function(session_name, sesh_num, t){
+  
+  sesh = get(session_name) %>%
+    .[[sesh_num]]
+  
+  n.trials=length(sesh$spks)
+  n.neurons=dim(sesh$spks[[1]])[1]
+  
+  firingrate=numeric(n.trials)
+  for(i in 1:n.trials){
+    firingrate[i]=(sum(sesh$spks[[i]])/n.neurons)/t
+  }
+  
+  trial_num_vec = 1:n.trials
+  tbl = data.frame(sesh$contrast_left, sesh$contrast_right, sesh$feedback_type, sesh$mouse_name, sesh$date_exp, firingrate, trial_num_vec)
+  colnames(tbl) <- c("contrast_left", "contrast_right", "feedback_type", "mouse_name", "date_exp", "firingrate", "trial_num")
+  
+  tbl = tbl %>%
+    mutate(session_num = sesh_num,
+           num_neurons = n.neurons)
+  
+  return(tbl)
+  
+}
+
+t=0.4 # from Background 
+final_data = pmap_dfr(list(
+  rep("session",length(session)),
+  as.list(seq_along(session)),
+  rep(t,length(session))
+), 
+session_to_tbl)
+
+session_and_num_trials <- final_data %>%
+  group_by(session_num) %>%
+  summarise(count_trials = n()) %>%
+  ungroup()
+
+final_data_clean = final_data %>%
+  mutate(contrast_left = as.factor(contrast_left),
+         contrast_right = as.factor(contrast_right),
+         session_num = as.factor(session_num))
+```
+
+# Descriptive analysis
+
+## Neural Activity Outlier Analysis
+
+Given the idea proposed to use mean firing rate to quantify neural activity, it is worth noting that mean firing rate would be affected by outlier neurons, or in other words neurons that fire very frequently. Therefore, I examine the presence of outlier neurons below, by charting histograms of the average firing rate per second for each neuron, averaged across all trials in a session. Below, I create a histogram for each session. I do this outlier analysis across each session, since the set of neurons differs across each session.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# get neuron level data for summary statistics
+session_to_trial_neuron_level <- function(session_name, sesh_num, t){
+  
+  sesh = get(session_name) %>%
+    .[[sesh_num]]
+  
+  n.trials=length(sesh$spks)
+  n.neurons=dim(sesh$spks[[1]])[1]
+  
+  firingrate_tbl = data.frame()
+  
+  for(i in 1:n.trials){
+    temp=data.frame(sesh$spks[[i]] %>% rowSums())
+    colnames(temp) <- c("neuron_spikes")
+    temp = temp %>%
+      mutate(neuron_spikes_per_sec = neuron_spikes/t,
+             neuron = row_number(),
+             trial_num = i) %>%
+      dplyr::select(-neuron_spikes)
+    
+    firingrate_tbl = firingrate_tbl %>%
+      bind_rows(temp)
+  }
+  
+  firingrate_tbl = firingrate_tbl %>%
+    mutate(session_num = sesh_num)
+  
+  return(firingrate_tbl)
+  
+}
+
+graph = pmap_dfr(list(
+  rep("session",length(session)),
+  as.list(seq_along(session)),
+  rep(t,length(session))
+), 
+session_to_trial_neuron_level)
+
+session_neuron_level <- graph %>%
+  group_by(session_num, neuron) %>%
+  summarise(mean_spikes_per_sec_across_trials = mean(neuron_spikes_per_sec)) %>%
+  ungroup()
+
+# chart histograms
+par(mfrow = c(2,3))
+for (i in seq_along(session)) {
+  filt <- session_neuron_level %>%
+    filter(session_num == i)
+  
+  hist(filt$mean_spikes_per_sec_across_trials, breaks = 20, main = paste0("Session ", i),
+       ylab = "Count of Neurons", xlab = paste0("Mean Firing Rate Per Second"),
+       col = "#00AFBB", xlim = c(0, 40))
+  
+}
+
+```
+
+From these histograms, it appears across all sessions, many neurons either have a zero or very low mean firing rate. Furthermore, each session has some neurons that have very high mean firing rate. I will call these "outliers" based on a non-rigorous definition. This suggests that our mean firing rate will be biased upward by a handful of very active neurons. It is possible these outliers could represent issues with how the data was collected and maybe there was some measurement error, but I have no way of confirming this. On the other hand, maybe this data was properly collected. If so, the proportion of neurons that never or rarely fired would be informative for measuring overall neural activity, so it would be important to keep these neurons for my analysis. Similarly, it would make sense to include all outliers in the right tail, since neurons that fire very often can characterize high neural activity.
+
+Furthermore, the session 4 and 5 histograms look quite different than those for other sessions, since they have much lower neuron firing activity. This make sense since sessions 1 to 3 were run with the mouse Cori while sessions 4 and 5 were run using the mouse Forssmann. It appears that Forssmann had lower firing rates on average than Cori. The implication of this finding for model selection will be discussed later.
+
+In addition, I also conduct some exploratory analysis to see if there are any outlier trials. To do this, I simply create a histogram of mean firing rate per second averaged across all neurons, for each trial.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# chart histogram
+hist(final_data_clean$firingrate, breaks = 50, main = "Mean Firing Rate Per Second For Each Trial",
+       ylab = "Count of Trials", xlab = "Mean Firing Rate Per Second", col = "#00AFBB", xlim = c(0, 8))
+
+```
+
+The distribution of mean firing rate across trials is non-normal and there are no trials with a zero mean firing rate. However, there are some trials with a very low mean firing rate, likely because the mice were disengaged during some trials. As seen from the histogram, only a small percentage of trials have a low firing rate below one, so this is not too concerning. There are also a handful of outliers in the right tail. These outliers are not too extreme and only occupy a small percentage of observations.
+
+Therefore, I still propose using mean firing rate per second, averaged across all neurons in a trial, as the response variable for my initial model, due to the reasons mentioned earlier. Later, I conduct a sensitivity to ensure the results of my statistical model are robust to a different choice of response variable to measure neural activity. Next for my descriptive analysis, I show a box plot that relates mean firing rate to levels of left and right stimuli.
+
+## Multivariate Descriptive Statistics
+
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# make box plot
+ggplot(data = final_data_clean) + geom_boxplot(aes(y = firingrate, x = contrast_left, fill = contrast_right)) +
+  theme_bw() + labs(title = "Boxplot of Mean Firing Rate Across Different Contrasts\nof Left and Right Stimuli", y = 'Mean Firing Rate', x = 'Left Stimuli Contrast', fill = "Right Stimuli Contrast") + theme(plot.title = element_text(hjust = 0.5))
+
+
+
+```
+
+From this plot, we observe some differences in mean firing rate across different contrasts for left and right stimuli. For both left and right stimuli, there is some evidence that higher contrast levels could be associated with higher mean firing rates. Some increasing trends for right stimuli can be seen by looking within the box plot clusters where left stimuli contrast is 0 or 0.25. Some increasing trends for left stimuli can be seen by looking at the red boxes representing when right stimuli is held at 0. However, this general trend does not apply in all cases. For example, when left contrast is 0.5 or 1, then it appears there is on average more neural activity when right contrast is zero compared to when there are higher values of right contrast. Since this trend is not consistent, it is possible that interaction effects between left and right contrast may be at play. In other words, it appears right contrast has an impact on the relationship between left contrast and firing rate, and vice versa. This will be examined further in the inferential analysis section.
+
+Earlier I find that neural activity differs across sessions and mice, when measuring activity at the neuron level. Since this analysis will be done at the trial level, I also investigate neural activity for each session at the trial level, when aggregating across neurons, using a box plot.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# make box plot
+ggplot(data = final_data_clean) + geom_boxplot(aes(y = firingrate, x = session_num, fill = mouse_name)) +
+  theme_bw() + labs(title = "Distribution of Mean Firing Rate Across Different\nSessions and Mice", y = 'Mean Firing Rate', x = 'Session Number', fill = "Mouse Name") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+One can observe that after aggregating to the trial level, neural activity for Cori is higher than neural activity for Forssmann. This is consistent with earlier findings in my descriptive analysis. Furthermore, this plot shows that even for a given mouse, neural activity seems to be different across sessions. This is especially apparent when comparing sessions 4 and 5. Therefore, it would make sense to include session number as a control in my statistical analysis.
+
+While mouse looks like it has an impact on firing rate, I choose not to include the mouse variable as a predictor in my statistical model. Since each session only contains one mouse, including session number in my model should already account for the impact of mouse on neural activity.
+
+# Inferential Analysis
+
+## Model Selection
+
+The multivariate descriptive statistics support the inclusion of left stimuli contrast, right stimuli contrast, the interaction between left and right stimuli, and session number as predictors in this model. Above I established that mean firing rate will be used as the response. Now I discuss what model is used.
+
+Since the administrators of the experiment chose the contrast levels for the left and right stimuli, and also since this analysis aims to understand how the neural activity in the visual cortex is modulated by the two stimuli, it makes sense to have left contrast, right contrast, and the interaction between the two all as fixed effects. Contrast levels are treated as factors, since treating them as numeric would imply a linear trend between the contrast levels used in the experiment, which is an assumption I do not want to make.
+
+On the other hand, I choose to include session number as a random effect, for two main reasons. The first is that the goal is to draw inferences that generalize to all sessions or scenarios, not just these five sessions. Secondly, even though the time of the session may have been determined by the experimenters, the conditions of each session are to some degree random, so the conditions of the five sessions we have can be seen as a random sample from all possible conditions a session could have. I do not include a mouse effect in the model, since as mentioned above, the session random intercepts should already act as a control for the effects of the two different mice.
+
+## Model Results and Hypothesis Tests
+
+I run a mixed effects model with these specifications, as shown below in factor effects form.
+
+$$ Y_{ijkl} = \mu_{\cdot\cdot\cdot} + \alpha_i+\beta_j + \gamma_k+ (\alpha\beta)_{ij}+\epsilon_{ijkl}, \ l=1,\ldots, n_{ijk}, i=1, \ldots,4 , j=1,\ldots, 4 , k=1,\ldots, 5 $$
+
+For this model we assume that $\{\epsilon_{ijkl}\}$ are i.i.d. $N(0,\sigma^2)$ and $\gamma_k$ are i.i.d. $N(0, \sigma_{\gamma}^2)$. So therefore we assume that the random errors and the random intercepts for session number are normally distributed around zero and are independent. Moreover, I assume that $\epsilon_{ijkl}$ is mutually independent with $\gamma_{k'}\ \text{for any }k,k'\in\{1,...,5\}$.
+
+Here the index $i$ is the index for the left stimuli contrast level fixed effect, the index $j$ is the index for the right stimuli contrast level fixed effect, and index $k$ is the index for the session number random effect. Index $l$ represents the subject index for the $ijk$th cell.
+
+Therefore, $\alpha_i$ represents the main effect from the $i$th contrast level of the left stimuli, $\beta_j$ represents the main effect from the $j$th contrast level of the right stimuli, $\gamma_k$ represents the random effect from the $k$th session, and $(\alpha\beta)_{ij}$ represents the interaction effect from the $i$th contrast of left stimuli and $j$th contrast of right stimuli. The outcome $Y_{ijkl}$ represents the mean firing rate for the $l$th subject in the cell for the $i$th left stimuli contrast, $j$th right stimuli contrast, and $k$th session.
+
+The mean $\mu_{...}$ represents the mean firing rate across all left and right stimuli contrast levels contained in the experiment, and across all possible session characteristics (since session is treated as a random effect). The errors $\epsilon_{ijkl}$ capture any unexplained effects on mean firing rate. $n_{ijk}$ is the number of observations with the $i$th left stimuli contrast, $j$th right stimuli contrast, and $k$th session number.
+
+This ANOVA model is imbalanced. I define constraints for this model such that $\ \alpha_1\ = 0$, $\ \beta_1\ = 0$, $(\alpha\beta)_{1j} = 0\ \forall j$, and $(\alpha\beta)_{i1} = 0\ \forall i$. These are the default baseline constraints used in R. I define contrast for left stimuli to be 0 when i = 1, and I define contrast for right stimuli to be 0 when j = 1. Therefore, contrast level being zero serves as the reference group for both left and right stimuli fixed effects.
+
+After running this mixed effects model, I conduct some hypothesis tests to investigate some key questions. In this model, using likelihood ratio tests are more appropriate than conducting F tests to assess the significance of our predictors. This is because the F test relies more heavily on the assumption of normality of errors, which I will show later is violated in this model. Since our sample size is quite large and we have over 1000 trials, the likelihood ratio test is reliable with this large sample size, despite the violation of normality. The results shown below are all results from likelihood ratio tests, all at the **0.05** significance level.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# run model and various reduced models
+model <- lmerTest::lmer(firingrate ~ contrast_left*contrast_right + (1 | session_num), data = final_data_clean)
+
+model_no_int <- lmerTest::lmer(firingrate ~ contrast_left+contrast_right + (1 | session_num), data = final_data_clean)
+model_no_left = lmerTest::lmer(firingrate ~ contrast_right + (1 | session_num), data = final_data_clean)
+model_no_right = lmerTest::lmer(firingrate ~ contrast_left + (1 | session_num), data = final_data_clean)
+```
+
+```{r include = FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# likelihood ratio tests for stimuli
+p_value_adding_left <- anova(model_no_left, model_no_int) %>%
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model_no_int") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+   
+p_value_adding_right <- anova(model_no_right, model_no_int) %>%
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model_no_int") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+
+```
+
+```{r eval=FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+# testing
+summary(model)
+anova(model)
+
+```
+
+First I test the significance of adding the left stimuli, given right stimuli and session random effect are already in the model.
+
+$$H_0: \alpha_i = 0\ \forall i, \ \  H_A: not\ all\ \alpha_i\ are\ 0$$
+
+Then I test the significance of adding the right stimuli, given left stimuli and session random effect are already in the model.
+
+$$H_0: \beta_j = 0\ \forall j, \ \  H_A: not\ all\ \beta_j\ are\ 0$$
+
+These tests yield p-values of **`r p_value_adding_left`** and **`r p_value_adding_right`**, so we reject the null hypothesis in both tests and conclude there is evidence that the contrast levels of left and right stimuli both have a significant effect on mean firing rate. Next I test whether an interaction effect between left and right stimuli exists and should be retained in my mixed effects model. So I conduct the following test:
+
+$$H_0: (\alpha\beta)_{ij}=0 \: \forall i,j, \ \  H_A: {\rm not \ all\ } (\alpha\beta)_{ij}\ {\rm are\ zero}$$
+
+```{r include = FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# likelihood ratio test for interaction term
+print("Test Adding Interaction")
+p_value_interact = anova(model_no_int, model) %>% 
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+```
+
+This test yields a p-value of **`r p_value_interact`**, so we reject the null and conclude that there are significant interaction effects between contrast level for left and right stimuli. In other words, the left and right stimuli do not have additive effects on neural responses. 
+
+Now I show the estimated coefficients $\hat{\alpha_i}\ \forall i$ and $\hat{\beta_j}\ \forall j$ and their corresponding P-values for this mixed effects model. Due to my choice of constraints as specified above, $\hat{\alpha_1} = 0$ and $\hat{\beta_1} = 0$, so only three estimates for indices 2 to 4 are shown for both left and right stimuli.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# create coefficient table
+coefs = summary(model)$coef %>%
+  data.frame() %>%
+  tibble::rownames_to_column() %>%
+  rename(estimate = `Estimate`) %>%
+  mutate(left_contrast = str_replace(rowname, "^contrast_left(.+)contrast_right.+$", "\\1")) %>%
+  
+  mutate(right_contrast = str_replace(rowname, "^contrast_left.+contrast_right(.+)$", "\\1")) %>%
+  
+  mutate(left_contrast = as.numeric(gsub(":", "", left_contrast)),
+         right_contrast = as.numeric(right_contrast)) %>%
+  
+  mutate(right_contrast = case_when(
+    is.na(right_contrast) ~ as.numeric(str_replace(rowname, "^contrast_right(.+)$", "\\1")),
+    T ~ right_contrast
+  ),
+  left_contrast = case_when(
+    is.na(left_contrast) ~ as.numeric(str_replace(rowname, "^contrast_left(.+)$", "\\1")),
+    T ~ left_contrast
+  )
+  )
+
+alpha_beta_tbl = coefs %>%
+  filter((!is.na(right_contrast) & is.na(left_contrast)) | (is.na(right_contrast) & !is.na(left_contrast))) %>%
+  mutate(`Contrast Level` = coalesce(left_contrast, right_contrast)) %>%
+  rename(`P-value` = `Pr...t..`,
+         Estimate = estimate) %>%
+  mutate(stimuli = ifelse(!is.na(right_contrast), "Right Stimuli", "Left Stimuli")) %>%
+  # mutate(`P-value` = round(`P-value`,2)) %>%
+  dplyr::select(Estimate, `P-value`, `Contrast Level`, stimuli) %>%
+  pivot_wider(id_cols = c("Contrast Level"), names_from = c("stimuli"), values_from = c("Estimate", "P-value"), names_sep = ": ") %>%
+  dplyr::select(c("Contrast Level", "Estimate: Left Stimuli", "P-value: Left Stimuli", "Estimate: Right Stimuli", "P-value: Right Stimuli")) %>%
+  mutate_at(vars(contains("value")), ~signif(., 3))
+  
+alpha_beta_tbl %>% gt() %>%
+  tab_header(
+    title = "Estimated Coefficients for Left and Right Stimuli",
+  ) %>%
+  fmt_number(
+    columns = c("Estimate: Left Stimuli", "Estimate: Right Stimuli")
+    # n_sigfig = 3,
+    # drop_trailing_zeros = T
+  )
+```
+
+All of the right stimuli coefficients and two of the three left stimuli coefficients are significant at the 0.05 level. This makes sense given our likelihood ratio test confirmed that both of these fixed effects are statistically significant. Moreover, the value of the estimates suggests that holding all else equal and controlling for interaction effects, a higher contrast level for left and right stimuli is generally associated with a higher mean firing rate.
+
+However, it is also worth analyzing the effects of left and right stimuli when incorporating interaction effects. Therefore, I further investigate the relationship between left and right stimuli and mean firing rate by charting a table of the estimated mean firing rate for each unique combination of contrast levels for left and right stimuli. These estimated cell means incorporate interaction effects.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# create cell mean heat map
+intercept = coefs %>%
+  filter(rowname == "(Intercept)") %>% pull(estimate)
+
+left_contrast_tbl = coefs %>%
+  filter(!is.na(left_contrast) & is.na(right_contrast)) %>%
+  dplyr::select(estimate, left_contrast)
+
+right_contrast_tbl = coefs %>%
+  filter(!is.na(right_contrast) & is.na(left_contrast)) %>%
+  dplyr::select(estimate, right_contrast)
+
+interact_tbl = coefs %>%
+  filter(!is.na(right_contrast) & !is.na(left_contrast)) %>%
+  dplyr::select(estimate, left_contrast, right_contrast)
+
+left_contrast <- c(0, 0.25, 0.5, 1)
+right_contrast <- c(0, 0.25, 0.5, 1)
+
+coef_skel <- expand.grid(as.data.frame(cbind(left_contrast, right_contrast)))
+
+coef_calc = coef_skel %>%
+  left_join(left_contrast_tbl %>% rename(left_est = estimate), by = c("left_contrast"))%>%
+  left_join(right_contrast_tbl %>% rename(right_est = estimate), by = c("right_contrast")) %>%
+  left_join(interact_tbl%>% rename(interact_est = estimate), by = c("left_contrast","right_contrast")) %>%
+  mutate_at(vars(-left_contrast, -right_contrast), ~replace_na(., 0)) %>%
+  mutate_at(vars(left_contrast, right_contrast), ~as.factor(.)) %>%
+  mutate(cell_mean_est = intercept + left_est + right_est + interact_est) 
+  
+ggplot(coef_calc, aes(x = left_contrast, y = right_contrast, fill= cell_mean_est)) +
+  geom_tile() + theme_bw() +
+  geom_text(aes(label = round(cell_mean_est,2)), color = "white", size = 4) +
+  labs(title="Estimated Mean Firing Rate Based On\nLeft and Right Contrast",
+        x ="Left Contrast", y = "Right Contrast", fill = "Mean Firing Rate") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+First, from this table we can see that generally higher contrast levels of left and right stimuli lead to more neural activity, which is consistent with the result from the coefficient table from earlier. From looking at the top right 3-by-3 grid, one can see that assuming both left and right contrast levels are non-zero, then usually as left and right contrast levels increase, then neural activity, measured by mean firing rate, also increases. However, this pattern does not hold in all cases due to interaction effects, and so the relationship between left and right stimuli and neural activity is more nuanced.
+
+For example, whenever right stimuli contrast level is non-zero, then neural activity is higher when left stimuli contrast level is zero compared to when left contrast level is 0.25. This could be because the task for a mouse may be clearer when one stimuli is activated while the other stimuli is not and cause the mouse to fire more neurons due to the clarity of the task. Also, whenever left stimuli contrast level is non-zero, then neural activity when right stimuli contrast level is zero is on average similar to when right contrast level is 0.25. In this specific case, higher contrast does not necessarily lead to higher mean firing rate. 
+
+Having interaction effects in the mixed effects model helps to model this more nuanced, complex relationship between left and right stimuli and neural activity. That is why interaction effects are statistically significant and the effects of left and right stimuli on neural activity are not additive.
+
+# Sensitivity Analysis
+
+First, I test whether the session random effect should be retained in the model, with the following hypothesis. I use a likelihood ratio test with a significance level of 0.05.
+
+$$H_0: \sigma_{\gamma}^2 = 0, \ \  H_A: \sigma_{\gamma}^2 \ne 0$$
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+# LR test for random effect
+model_no_rand <- lm(firingrate ~ contrast_left*contrast_right, data = final_data_clean)
+```
+
+```{r include = FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+p_value_random = anova(model, model_no_rand) %>% 
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+```
+
+This test yields a p-value of **`r p_value_random`**, so we reject the null and prove that the session random effect term is very statistically significant. Therefore this random effect term should be kept in the main model.
+
+
+## Model Diagnostics
+
+Next I run some model diagnostics for this mixed effects model to determine whether the model assumptions are fulfilled. First I assess whether the residuals and session random effect are normally distributed around zero using QQ plots.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# qq plots
+d1 = data.frame(resid(model))
+colnames(d1) <- c("residuals")
+pp1 = ggplot(d1, aes(sample=residuals)) +
+  stat_qq() + 
+  stat_qq_line() + theme_bw() +
+  labs(title="Residuals Q-Q Plot",
+        x ="Theoretical Quantiles", y = "Sample Quantiles") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+d2 = data.frame(ranef(model)$session_num[, 1])
+colnames(d2) <- c("intercepts")
+pp2 = ggplot(d2, aes(sample=intercepts)) +
+  stat_qq() + 
+  stat_qq_line() + theme_bw() +
+  labs(title="Session Random Intercept Q-Q Plot",
+        x ="Theoretical Quantiles", y = "Sample Quantiles") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(pp1, pp2, ncol = 2)
+
+# par(mfrow = c(1,2))
+# qqnorm(resid(model), main = "Residuals")
+# qqline(resid(model))
+# 
+# qqnorm(ranef(model)$session_num[, 1], 
+#        main = "Random effects of Session")
+# qqline(ranef(model)$session_num[, 1])
+```
+
+```{r include=FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+# additional diagnostics
+residuals=resid(model)
+hist(residuals, breaks = 20, main = "Histogram of Residuals")
+
+shapiro.test(x = resid(model)) %>% pander()
+
+resid_and_data = cbind(final_data_clean, residuals)
+
+```
+
+I believe it is reasonable to assume the random intercept for session is normally distributed, even though it is difficult to test this given so few data points. However, the residual distribution is right-skewed and non-normal.
+
+The normality violation does not seem to be too large, and does not undermine the results of our model since our sample size is large. However, this normality violation suggests the likelihood ratio test is more appropriate than the F test for any hypothesis testing in this model. This is because the likelihood ratio test is reliable for large enough sample size and does not rely as much on the normality assumption compared to the F test.
+
+Next I examine if there is equal variance for the residuals and if the error terms are independent. I plot residuals against fitted values over the whole dataset, and then I also plot residuals against trial number within each session to see if errors are correlated based on trial sequence. Moreover, I color the residuals in this latter plot so that blue dots represent trials in which mice succeeded in the task and red dots represent trials in which mice failed.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# residual plots
+plot(model, main = "Residuals vs. Fitted Values", xlab = "Fitted Values", ylab="Residuals", col = "#00AFBB")
+
+data_w_res <- cbind(final_data_clean, residuals)
+  
+ggplot(data_w_res %>% mutate(feedback_type = as.factor(feedback_type)), aes(trial_num, residuals, color = feedback_type)) + geom_point() + 
+geom_smooth(method="lm", se = F, size = 1) + theme_bw() +
+facet_wrap(~session_num) + scale_fill_manual(values = c("#00AFBB","#FC4E07")) +labs(title="Residuals vs Trial Number\nFor Each Session",
+        x ="Trial Number", y = "Residual", color = "Success")  + theme(plot.title = element_text(hjust = 0.5))
+
+
+
+```
+
+The residuals versus fitted values plot over the whole dataset shows that while there are some differences in variance across observations, these differences do not seem to be very large and should not be cause for too much concern.
+
+However, the plots of residuals against trial number for each session show clear correlation in the error terms. As trial number increases, it generally appears that the error term decreases which implies that neural activity is decreasing. There are two possible explanations for this phenomenon. One explanation is that mice are getting tired as the session goes on, and therefore their neural activity decreases. Another possible explanation is that as the trial progresses, mice were learning and getting more accustomed to the task and therefore had to use less brain power.
+
+Based on the chart above, it appears that the fatigue explanation is more plausible. This is because it appears that the mouse performs worse for later trials within a session. If neural activity decreased over time because mice were learning, we would expect the mice to have better performance near the end of the trial. Since we see the opposite, it makes sense that fatigue was causing mice to perform worse later in trials.
+
+## Sensitivity to Deal with Outliers
+
+Earlier I established that the distribution of the response variable, mean firing rate, is not normal, and I also found that the residuals of my mixed effects model violate the normality assumption. Furthermore, using mean firing rate is appropriate if the frequency of neuron firing in a trial, especially the frequency of firing for outlier neurons that are very active, is an important quantifier of neural activity. However, these outlier neurons that fire very frequently have a strong influence on the mean firing rate for a given trial and could potentially be part of the reason why the residuals in the mixed effects model are not normal. If the exact frequency of neuron firing is not important, and instead what is more important is just whether or not a neuron was active in a trial, then a different response variable may make more sense. I rerun my mixed effects model above but using a different response variable, which is the proportion of neurons that fired at least once in the trial, and summarize these results. Note that this proportion measure is comparable across trials with different numbers of neurons.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# make new dataset including proportion of neurons fired variable
+fired_at_least_once <- graph %>%
+  mutate(fired_at_least_once_ind = ifelse(neuron_spikes_per_sec > 0, 1, 0)) %>%
+  group_by(session_num, trial_num) %>%
+  summarise(fired_at_least_once_count = sum(fired_at_least_once_ind),
+            num_neurons = max(neuron)) %>%
+  ungroup() %>%
+  mutate(perc_neurons_fired = fired_at_least_once_count/num_neurons) %>%
+  mutate(session_num = as.factor(session_num)) %>%
+  dplyr::select(-fired_at_least_once_count, -num_neurons)
+
+final_data_new_response = final_data_clean %>%
+  left_join(fired_at_least_once, by = c("session_num", "trial_num"))
+
+# run model sensitivity
+model_new_response <- lmerTest::lmer(perc_neurons_fired ~ contrast_left*contrast_right + (1 | session_num), data = final_data_new_response)
+```
+
+```{r include = FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# rerun hypothesis tests and diagnostics for this new model
+summary(model_new_response)
+
+model_no_int_newresp <- lmerTest::lmer(perc_neurons_fired ~ contrast_left+contrast_right + (1 | session_num), data = final_data_new_response)
+
+print("Test Adding Interaction")
+
+p_value_interact_new_resp = anova(model_no_int_newresp, model_new_response) %>% 
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model_new_response") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+
+residuals_new_response=resid(model_new_response)
+hist(residuals_new_response, breaks = 50, main = "Histogram of Residuals")
+
+shapiro.test(x = resid(model_new_response)) %>% pander()
+
+```
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# plot heat map and qq plot of residuals for new model
+coefs2 = summary(model_new_response)$coef %>%
+  data.frame() %>%
+  tibble::rownames_to_column() %>%
+  rename(estimate = `Estimate`) %>%
+  mutate(left_contrast = str_replace(rowname, "^contrast_left(.+)contrast_right.+$", "\\1")) %>%
+  
+  mutate(right_contrast = str_replace(rowname, "^contrast_left.+contrast_right(.+)$", "\\1")) %>%
+  
+  mutate(left_contrast = as.numeric(gsub(":", "", left_contrast)),
+         right_contrast = as.numeric(right_contrast)) %>%
+  
+  mutate(right_contrast = case_when(
+    is.na(right_contrast) ~ as.numeric(str_replace(rowname, "^contrast_right(.+)$", "\\1")),
+    T ~ right_contrast
+  ),
+  left_contrast = case_when(
+    is.na(left_contrast) ~ as.numeric(str_replace(rowname, "^contrast_left(.+)$", "\\1")),
+    T ~ left_contrast
+  ))
+
+intercept2 = coefs2 %>%
+  filter(rowname == "(Intercept)") %>% pull(estimate)
+
+left_contrast_tbl2 = coefs2 %>%
+  filter(!is.na(left_contrast) & is.na(right_contrast)) %>%
+  dplyr::select(estimate, left_contrast)
+
+right_contrast_tbl2 = coefs2 %>%
+  filter(!is.na(right_contrast) & is.na(left_contrast)) %>%
+  dplyr::select(estimate, right_contrast)
+
+interact_tbl2 = coefs2 %>%
+  filter(!is.na(right_contrast) & !is.na(left_contrast)) %>%
+  dplyr::select(estimate, left_contrast, right_contrast)
+
+coef_calc2 = coef_skel %>%
+  left_join(left_contrast_tbl2 %>% rename(left_est = estimate), by = c("left_contrast"))%>%
+  left_join(right_contrast_tbl2 %>% rename(right_est = estimate), by = c("right_contrast")) %>%
+  left_join(interact_tbl2%>% rename(interact_est = estimate), by = c("left_contrast","right_contrast")) %>%
+  mutate_at(vars(-left_contrast, -right_contrast), ~replace_na(., 0)) %>%
+  mutate_at(vars(left_contrast, right_contrast), ~as.factor(.)) %>%
+  mutate(cell_mean_est = intercept2 + left_est + right_est + interact_est) 
+
+p1 = ggplot(coef_calc2, aes(x = left_contrast, y = right_contrast, fill= cell_mean_est)) + geom_tile() + theme_bw() +
+  geom_text(aes(label = round(cell_mean_est,3)), color = "white", size = 4) +
+  labs(title="Estimated Proportion of Neurons\nThat Fired Based On Left\nand Right Contrast",
+        x ="Left Contrast", y = "Right Contrast") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+re = data.frame(resid(model_new_response))
+colnames(re) <- c("residuals")
+p2 = ggplot(re, aes(sample=residuals)) +
+  stat_qq() + 
+  stat_qq_line() + theme_bw() +
+  labs(title="Residuals Q-Q Plot",
+        x ="Theoretical Quantiles", y = "Sample Quantiles") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+grid.arrange(p1, p2, ncol = 2)
+
+
+
+
+```
+
+In this model the interaction between left and right stimuli fixed effects is statistically significant with a p-value of **`r p_value_interact_new_resp`** based on a likelihood ratio test. Also the relationships between the left stimuli, right stimuli, and interaction fixed effect with neural activity are similar to what was observed in the initial model, as shown by the estimated proportions table above. Here each cell in the table represents the estimated proportion of neurons that fired in a trial, given the contrast levels of left and right stimuli. Similar to the results of the initial model, generally higher contrast levels of left and right stimuli lead to more neural activity, but this does not hold in all cases due to the presence of interaction effects.
+
+Using this new response variable, we are unable to solve the residual normality violation issue, as shown on the Q-Q plot where we observe heavy tails.  Nevertheless, the results of this sensitivity are still useful. They show that my initial results are robust and still hold when changing to a new response variable which focuses more on number of active neurons rather than the frequency of firing of neurons.
+
+## Sensitivity to Deal with Correlation in Error Term Based on Trial Number
+
+Above I found that the error terms showed dependence, namely that the error term is negatively correlated with trial number. In other words, as the session went longer the mice exhibited weaker neural activity, possibly because they were getting tired. To try and fix this issue, I introduce a new factor variable, which is the period during which the trial occured within a session. I define 5 different periods: trials 1-50, 51-100, 101-150, 151-200, and 200 or later. Each session has over 200 trials but under 260 trials, so I believe this categorization makes sense. I believe it is superior to adding a fixed effect for every single trial number, since that would substantially reduce the statistical power of the model and also sessions have different numbers of trials. I do not treat trial number as numeric since that would imply that mean firing rate has a linear association with trial number, which I do not want to assume.  I rerun my original mixed effects model that had mean firing rate as the response variable, with the addition of this new session period factor as a fixed effect.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# make new session period variable and run new model with this variable
+final_data_binned_trial = final_data_clean %>%
+  mutate(binned_trial = case_when(
+    trial_num <=50 ~ "Trial 01-50",
+    trial_num <=100 ~ "Trial 051-100",
+    trial_num <=150 ~ "Trial 100-150",
+    trial_num <=200 ~ "Trial 150-200",
+    T ~ "Trial 200+"
+  )) %>%
+  mutate(binned_trial = as.factor(binned_trial))
+
+model_binned <- lmerTest::lmer(firingrate ~ contrast_left*contrast_right + (1 | session_num) + binned_trial, data = final_data_binned_trial)
+
+residuals_binned = resid(model_binned)
+
+coefs_binned = summary(model_binned)$coef %>%
+  data.frame() %>%
+  tibble::rownames_to_column() %>%
+  rename(estimate = `Estimate`) %>%
+  filter(grepl("trial", rowname)) %>%
+  mutate(estimate = signif(estimate, 3)) %>%
+  pull(estimate) %>%
+  glue_collapse(sep = ", ")
+```
+
+```{r include = FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+# hypothesis test and diagnostics using model with session period variable
+summary(model_binned)
+
+model_no_int_binned <- lmerTest::lmer(firingrate ~ contrast_left+contrast_right + (1 | session_num) + binned_trial, data = final_data_binned_trial)
+
+model_og<- lmerTest::lmer(firingrate ~ contrast_left*contrast_right + (1 | session_num), data = final_data_binned_trial)
+
+print("Test Adding Interaction")
+
+
+p_value_interact_binned = anova(model_no_int_binned, model_binned) %>% 
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model_binned") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+
+
+p_value_bin_var = anova(model_og, model_binned) %>%
+  tibble::rownames_to_column() %>%
+  filter(rowname == "model_binned") %>%
+  pull(`Pr(>Chisq)`) %>%
+  signif(3) %>%
+  format(., digits = 3)
+
+hist(residuals_binned, breaks = 50, main = "Histogram of Residuals")
+
+shapiro.test(x = resid(model_binned)) %>% pander()
+
+qqnorm(resid(model_binned), main = "Residuals")
+qqline(resid(model_binned))
+
+```
+
+This model yields similar results to the initial model without the fixed effects for session period. The relationships between the left stimuli, right stimuli, and interaction fixed effect with neural activity are similar to what was observed in the initial model. Furthermore, the chart below shows that the independence of error terms assumption seems more plausible with this model, since residuals no longer seem to be very correlated with trial number.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# recreate residual plot for this new model
+data_w_res3 <- cbind(final_data_binned_trial, residuals_binned)
+
+ggplot(data_w_res3 %>% mutate(feedback_type = as.factor(feedback_type)), aes(trial_num, residuals_binned, color = feedback_type)) + geom_point() + 
+geom_smooth(method="lm", se = F, size = 1) + theme_bw() +
+facet_wrap(~session_num) + scale_fill_manual(values = c("#00AFBB","#FC4E07")) +labs(title="Residuals vs Trial Number For Each Session:\nModel Including Session Period",
+        x ="Trial Number", y = "Residual", color = "Success")  + theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+It is worth noting that a likelihood ratio test finds the session period factor variable to be statistically significant with a very small p-value of **`r p_value_bin_var`** from the likelihood ratio test. This proves that controlling for trial period produces a better model fit. As we would expect, the coefficients for later trial periods are more negative than coefficients for earlier trial periods. The coefficients for the trial periods 51-100, 101-150, 151-200, and 200+ are **`r coefs_binned`**, respectively. This shows that mean firing rate is on average higher earlier in a session, likely because a mice's brain gets tired later in sessions.
+
+Furthermore, using a likelihood ratio test to test the presence of an interaction effect in this model, we get a p-value of **`r p_value_interact_binned`**, compared to a p-value of **`r p_value_interact`** for the same test in the original model. This reinforces the conclusion that there exists a significant interaction term, and that the effects of left stimuli and right stimuli on neural activity are not additive.
+
+# Predictive Modeling
+
+## Initial Predictive Model
+
+The second goal of this project is to predict the outcome of each trial using information on stimuli and neural activity. I start with a logistic regression as my initial predictive model. I include left and right contrast, the interaction between the contrasts, and session number as predictors. It makes sense to include all these variables in an initial model because they were all statistically significant in our mixed effects model from earlier. However, it is worth noting that the session number is now included as a fixed effect, since we are now interested in prediction.
+
+Furthermore, I add the mean firing rate variable I created as another predictor in the logistic regression, since it is reasonable to think that more neural activity may lead to better decisions for the mice. I fit this model on the entire dataset except for the first 100 trials in session 1, and then I assess the predictive ability of this model on these first 100 trials in Session 1, which serves as my test dataset. The logistic regression model is specified below.
+
+$${\rm logit}(\pi_i)=X_i^{T} \beta\ \text{where }\pi_i = p(y_i=1|X_i)\ \text{and }{\rm logit}(a) = \log(a/(1-a))$$
+
+$\pi_i$ is between 0 and 1 and represents the probability that the trial outcome is a success given the values of the predictors. ${\rm logit}(\pi_i)$ represents the log odds ratio. 
+
+Note that $X_i^{T}$ contains values for all the predictors mentioned above, including interactions. In this vector X of variables, predictors that are factor variables such as left and right stimuli are coded as dummy variables. In this model, left and right stimuli are coded as three dummy variables each, since they each have four factor levels. Session number is coded as four dummy variables, since there are five sessions. The interaction between left and right stimuli are coded as nine dummy variables, since the baseline is when either left or right stimuli contrast is zero.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# split training and test data and run initial predictive model, and calculate AUC
+complete_data <- final_data_binned_trial %>%
+  left_join(final_data_new_response %>% 
+              select(session_num, trial_num, perc_neurons_fired),
+            by = c("session_num", "trial_num")) %>%
+  dplyr::select(-num_neurons)
+
+training_data <- complete_data %>%
+  filter(trial_num > 100 | session_num != 1) %>%
+  # mutate(feedback_type = ifelse(feedback_type==1, "Success", "Failure")) %>%
+  mutate(feedback_type = as.factor(feedback_type))
+
+test_data = complete_data %>%
+  filter(trial_num <= 100 & session_num == 1) %>%
+  # mutate(feedback_type = ifelse(feedback_type==1, "Success", "Failure")) %>%
+  mutate(feedback_type = as.factor(feedback_type))
+
+logistic_model <- glm(feedback_type ~ contrast_left*contrast_right + session_num + firingrate, data = training_data, family = "binomial")
+
+actual_values = test_data$feedback_type
+roc<-roc(actual_values,predict(logistic_model, newdata = test_data, type = "response"))
+auc = roc$auc
+
+
+```
+
+I fit this model, use it to predict the outcomes for the first 100 trials in session 1, and assess its predictive ability. The area under the ROC curve is a good measure to evaluate the predictive performance of a binary prediction model, before specifying a threshold for classification. For this initial model, the area under the curve is `r signif(auc, 3)`, which is larger than 0.5 but still not close to 1. The ROC curve is shown later in this section. It is possible that logistic regression models with more predictors could have better predictive performance. This could include additional variables such as the proportion of neurons that fired in a trial, or the period of a session during which a trial occurred.
+
+```{r include=FALSE, warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# perform stepwise regression and run improved predictive model and get AUC
+none_mod <- glm(feedback_type ~ contrast_left+contrast_right + session_num + firingrate, data = training_data, family = "binomial")
+full_mod <- glm(feedback_type ~ ., data = training_data, family = "binomial")
+aic_fwd_model = stepAIC(none_mod, scope = list(upper = full_mod, lower = none_mod), direction = 'both', k = 2, trace = F)
+
+logistic_model2 <- glm(feedback_type ~ contrast_left*contrast_right + session_num + firingrate + binned_trial, data = training_data, family = "binomial")
+
+roc2<-roc(actual_values,predict(logistic_model2, newdata = test_data, type = "response"))
+auc2 = roc2$auc
+
+```
+
+## Improved Predictive Model
+
+Since there are many different combinations of additional variables, I implement stepwise regression to choose which variables to add to get the best fit. I use AIC as my model selection criterion. The results of the stepwise regression show that just adding one more variable, the period of the session in which the trial occurred, gives us the best model fit according to AIC. Using this model I get an area under the ROC curve of `r signif(auc2, 3)`, which is an upgrade from the initial model. Below I plot the ROC curves of both the initial and improved predictive models.  
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# plot ROC curves and calculate best threshold and confusion matrix and sensitivity and specificity
+par(mfrow = c(1,2))
+plot(roc, print.thres=T, main = "Initial Predictive Model")
+plot(roc2, print.thres=T, main = "Improved Predictive Model")
+
+best_threshold = coords(roc2, "best", ret = "threshold") %>% pull(threshold)
+
+roc2_summary = data.frame(roc2$sensitivities, roc2$specificities, roc2$thresholds) %>%
+  mutate(sum_of_sens_spec = roc2.sensitivities+ roc2.specificities) %>%
+  arrange(desc(sum_of_sens_spec))
+
+predicted_values = as.factor(ifelse(predict(logistic_model2, newdata = test_data, type = "response")>best_threshold,1,-1))
+
+conf_matrix = table(as.factor(ifelse(predicted_values==1, "Success", "Failure")), as.factor(ifelse(actual_values==1, "Success", "Failure")))
+
+sensitivity = conf_matrix[2,2] / (conf_matrix[2,2] +conf_matrix[1,2])
+specificity = conf_matrix[1,1] / (conf_matrix[1,1] +conf_matrix[2,1])
+
+```
+
+Now that I have found an optimal model based on AIC and the available predictors, I will choose an optimal threshold and use that for my final prediction. Since there is no reason to believe we care about sensitivity more than specificity or vice versa, I define the optimal threshold to be the threshold that maximizes the sum of sensitivity and specificity. I calculate this threshold to be `r signif(best_threshold,3)`, which is shown on the ROC curve chart above. This threshold choice means that I predict the mouse to be successful if the logistic regression model predicts the probability of success to be between `r signif(best_threshold,3)` and 1. Otherwise, I predict that the mouse is not successful. 
+
+Using this updated model that includes the session period and using this optimal threshold, my prediction model achieves a specificity of **`r signif(specificity,3)`** and a sensitivity of **`r signif(sensitivity,3)`**. This is superior to the sensitivity and specificity achieved using the initial predictive model. The sensitivity and specificity can be calculated based on the confusion matrix shown below.
+
+```{r warning=FALSE, message=FALSE, comments=FALSE, echo=FALSE}
+
+# show confusion matrix
+conf_matrix %>% pander()
+
+```
+
+In the confusion matrix, the vertical axis represents predicted values and the horizontal axis represents actual values. The confusion matrix, along with the sensitivity and specificity metrics, show that the model is very strong at predicting failures. The model also performs reasonably well at predicting successes. I chose my predictive model assuming that predicting successes and failures are equally important, but in a scenario where predicting successes was more important, my threshold could be changed to increase sensitivity, which would also decrease specificity.
+
+
+
+# Conclusion
+
+The goal of this project was to use a subset of data from an experiment done by Steinmetz et al. (2019) in order to evaluate the relationship between neural activity in the visual cortex and visual stimuli presented to mice from both the left and right side. In addition, the project aims to develop a model to predict whether or not the mouse successfully performed the discrimination task defined in the experiment.
+
+To address the first goal, I establish an ANOVA mixed effects model with left stimuli, right stimuli, and the interaction as fixed effects and session as a random effect. My exploratory analysis supports these choices of predictors. I choose to quantify neural activity in a trial by using mean firing rate across all neurons. My descriptive analysis and qualitative arguments suggest that this is a reasonable measure to use. In this initial model, I infer that higher left or right stimuli contrast is generally associated with higher neural activity. However, the presence of statistically significant interactions between left and right stimuli mean the relationship is more complex than this. For example, neural activity is sometimes higher when only one of the two stimuli are turned on, compared to when both stimuli are turned on but one is at 0.25 contrast. Since session is included as a random effect in my model, these results apply more generally and are not limited to just sessions 1 to 5 from the Steinmetz et al. (2019) experiment.
+
+However, there are some imperfections related to this choice of model, with one being the choice of response variable. Mean firing rate is sensitive to outlier neurons, specifically neurons that fire very frequently. If the exact frequency of firing is not important or if these outliers may be data issues, then choosing another response variable that is less sensitive to these types of outlier may be appropriate. Therefore, I run a model sensitivity where the response variable is the proportion of neurons that fired in a given trial. The statistical significance of the stimuli interaction term and the relationships between left stimuli, right stimuli, and neural activity remain similar to what was found in the initial model. This proves my initial results are robust even when quantifying neural activity differently. 
+
+Another flaw of my initial model is the correlation between residuals and trial number, which violates the ANOVA model assumption that error terms are independent. I provide evidence that this probably occurs since mice get tired later on in a session, which causes them to utilize less brain power and also make more mistakes in the discrimnation task. To address this model issue, I run a model sensitivity with an extra fixed effect to try and control for the period of the session when a trial happened, using five different session periods. In this model sensitivity, the dependence of errors is no longer an issue and the impact of the interaction between left and right stimuli is more pronounced. This reinforces my initial finding that the effects of left stimuli and right stimuli on neural activity is not additive.
+
+I also devise a logistic regression model to predict the outcome of a trial. I start with using left and right stimuli and their interaction, session number, and mean firing rate as predictors. Based on the results of a stepwise regression, I also decide to include session period as another predictor, which represents when during a session that a trial occurred. Then I choose an optimal threshold for classification and develop a prediction model that performs reasonably well in terms of specificity and sensitivity. However, I acknowledge this may not be the best predictive model, as there are methods and potential predictors I have not yet explored.
+
+Even after confirming the robustness of my inferential analysis through sensitivities, this analysis still has some limitations. By my choice of response variable, I analyze the effects of left and right stimuli on neural activity on average across all types of neurons. If there are clear distinct groups of neurons, my analysis is unable to differentiate how these groups of neurons may be affected differently by left and right stimuli. Furthermore, my analysis is only able to make inferences in cases when mice are given left and right stimuli for contrast levels of 0, 0.25, 0.5, or 1. These are two areas where either my analysis can be expanded or further research can be done.
+
+
+# Reference {.unnumbered}
+
+Steinmetz, N.A., Zatka-Haas, P., Carandini, M. et al. Distributed coding of choice, action and engagement across the mouse brain. Nature 576, 266--273 (2019). <https://doi.org/10.1038/s41586-019-1787-x>

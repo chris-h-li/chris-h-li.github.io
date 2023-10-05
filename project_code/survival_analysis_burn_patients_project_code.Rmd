@@ -1,0 +1,394 @@
+
+---
+title: "STA 222 Midterm"
+author: "Christopher Li"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = 'center', warning = FALSE, message = FALSE)
+```
+
+## Data Cleaning
+```{r, results='hide', message=FALSE}
+library(KMsurv)
+library(survival)
+library(ggplot2)
+library(survminer)
+library(dplyr)
+library(tidyr)
+
+data(burn)
+
+# clean variable names and values
+burn1 <- burn
+burn1 <- data.frame(burn1,Treatment=factor(burn1$Z1,labels=c("Routine","Cleansing")))
+burn1 <- data.frame(burn1,Gender=factor(burn1$Z2,labels=c("Male","Female")))
+burn1 <- data.frame(burn1,Race=factor(burn1$Z3,labels=c("Nonwhite","White")))
+burn1 <- data.frame(burn1,PercentBurned=burn1$Z4)
+burn1 <- data.frame(burn1,SiteHead=factor(burn1$Z5,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,SiteButtock=factor(burn1$Z6,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,SiteTrunk=factor(burn1$Z7,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,SiteUpperLeg=factor(burn1$Z8,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,SiteLowerLeg=factor(burn1$Z9,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,SiteRespTract=factor(burn1$Z10,labels=c("NotBurned","Burned")))
+burn1 <- data.frame(burn1,BurnType=factor(burn1$Z11,labels=c("Chemical","Scald","Electric","Flame")))
+
+# create a survival object
+burn1.surv <- with(burn1,Surv(T3,D3))
+
+# discard the old variables which have been renamed and wose values have been edited
+burn1 <- burn1[ , !(names(burn1)) %in% c("Z1" ,"Z2" ,"Z3" ,"Z4" ,"Z5" , "Z6" , "Z7" ,"Z8" , "Z9" , "Z10" ,"Z11")]
+
+```
+
+
+
+## Exploratory analysis/Tabulations of covariates to show percentage breakdown of covariate values across treatment and non treatment groups
+```{r}
+
+# treatment
+treatment_grp = burn1 %>%
+  group_by(Treatment) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# gender
+gender_dist_by_treat = burn1 %>%
+  group_by(Treatment, Gender) %>%
+  summarise(Count = n()) %>%
+  ungroup() %>%
+  group_by(Treatment) %>%
+  mutate(Total = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Percent = Count/Total) %>%
+  pivot_wider(id_cols = c("Treatment", "Total"),
+              names_from = "Gender",
+              values_from = "Percent") %>%
+  select(-Total)
+
+# race
+race_dist_by_treat = burn1 %>%
+  group_by(Treatment, Race) %>%
+  summarise(Count = n()) %>%
+  ungroup() %>%
+  group_by(Treatment) %>%
+  mutate(Total = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Percent = Count/Total) %>%
+  pivot_wider(id_cols = c("Treatment", "Total"),
+              names_from = "Race",
+              values_from = "Percent") %>%
+  select(-Total)
+
+# burn type
+burntype_dist_by_treat = burn1 %>%
+  group_by(Treatment, BurnType) %>%
+  summarise(Count = n()) %>%
+  ungroup() %>%
+  group_by(Treatment) %>%
+  mutate(Total = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Percent = Count/Total) %>%
+  pivot_wider(id_cols = c("Treatment", "Total"),
+              names_from = "BurnType",
+              values_from = "Percent") %>%
+  select(-Total)
+
+# excision
+excision_dist_by_treat = burn1 %>%
+  group_by(Treatment, D1) %>%
+  summarise(Count = n()) %>%
+  ungroup() %>%
+  group_by(Treatment) %>%
+  mutate(Total = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Percent = Count/Total) %>%
+  pivot_wider(id_cols = c("Treatment", "Total"),
+              names_from = "D1",
+              values_from = "Percent") %>%
+  select(-Total)
+
+# antibiotic
+antibi_dist_by_treat = burn1 %>%
+  group_by(Treatment, D2) %>%
+  summarise(Count = n()) %>%
+  ungroup() %>%
+  group_by(Treatment) %>%
+  mutate(Total = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Percent = Count/Total) %>%
+  pivot_wider(id_cols = c("Treatment", "Total"),
+              names_from = "D2",
+              values_from = "Percent") %>%
+  select(-Total)
+
+
+antibi_dist_by_treat
+burntype_dist_by_treat
+excision_dist_by_treat
+gender_dist_by_treat
+race_dist_by_treat
+
+# burn percentage histograms
+par(mfrow = c(1, 2))
+hist(burn1 %>% filter(Treatment == "Routine") %>% pull(PercentBurned), main = "Burn % Histogram, Routine",
+     xlab = "Burn %")
+hist(burn1 %>% filter(Treatment == "Cleansing") %>% pull(PercentBurned), main = "Burn % Histogram, Cleansing",
+     xlab = "Burn %")
+
+# mean burn percentage across groups
+c(burn1 %>% filter(Treatment == "Routine") %>% pull(PercentBurned) %>%mean(),
+burn1 %>% filter(Treatment == "Cleansing") %>% pull(PercentBurned) %>%mean())
+  
+```
+
+
+## Survival, Cumulative Hazard, Hazard Ratio, and Cloglog
+```{r}
+
+# Kaplan Meier survival function
+KMcurves = survfit(burn1.surv~Treatment,data=burn1)
+
+center_title = theme_classic() + theme(plot.title = element_text(hjust = 0.5))
+names(KMcurves$strata) <- gsub("Treatment=", "", names(KMcurves$strata))
+ggsurvplot(KMcurves, ggtheme = center_title, legend.title = "") + labs(title = "KM Survival Curves for Routine vs. Antimicrobial Body Cleansing", x = "Time (weeks)")
+
+# Mantel-Haenszel test difference in survival curves
+print(survdiff(burn1.surv~Treatment,data=burn1))
+
+# Nelson Aaelen cumulative hazard
+NAcurves <- survfit(burn1.surv ~ Treatment, data = burn1, type="fleming-harrington")
+names(NAcurves$strata) <- gsub("Treatment=", "", names(NAcurves$strata))
+ggsurvplot(NAcurves, fun = "cumhaz", ggtheme = center_title, legend.title = "") + labs(title = "NA Cumulative Hazard Curves for Routine vs. Antimicrobial Body Cleansing", x = "Time (weeks)")
+
+# hazard ratio plot
+timevec <- 1:max(burn1$T3)
+#hazard routine
+sf1 <- stepfun(NAcurves[1]$time,c(1,NAcurves[1]$surv))
+#hazard cleansing
+sf2 <- stepfun(NAcurves[2]$time,c(1,NAcurves[2]$surv))
+#now we can find the cumulative hazards
+cumhaz1 <- -log(sf1(timevec))
+cumhaz2 <- -log(sf2(timevec))
+plot(timevec,cumhaz1/cumhaz2,type="l",ylab="Hazard Ratio",xlab="Time"
+     , col = 1, lwd=2)
+title("Hazard Ratio: Routine/Cleansing")
+
+
+# clog log plot
+ggsurvplot(NAcurves, fun = "cloglog", ggtheme = center_title, legend.title = "") + labs(title = "Complementary Log-Log Hazard Curves for \nRoutine vs. Antimicrobial Body Cleansing", x = "ln(Time (weeks))")                                    
+```
+
+## Run Initial Cox Model
+```{r}
+cox = coxph(burn1.surv~Treatment + Gender + Race + PercentBurned + SiteHead + SiteButtock + SiteTrunk + SiteUpperLeg + SiteLowerLeg + SiteRespTract + BurnType,data=burn1)
+
+summary(cox)
+
+# use to examine AIC of full model
+drop1(cox,test="Chisq")
+```
+
+AIC of initial model is 437.29.
+
+It appears that none of the burn site variables are close to being significant, individually. Let's test if the burn site variables collectively have any impact on hazard (maybe it is possible collectively they might have a significant impact on hazard if they are correlated with each other).
+
+## Model without Burn Site Vars
+```{r}
+cox_no_burnsite = coxph(burn1.surv~Treatment + Gender + Race + PercentBurned + BurnType,data=burn1)
+summary(cox_no_burnsite)
+drop1(cox_no_burnsite,test="Chisq")
+anova(cox_no_burnsite, cox)
+
+```
+
+Using likelihood ratio test, it appears that collectively, all the burn site variables do not have a significant impact on the hazard (pvalue = 0.832), so those variables are dropped for all subsequent analysis. Also, AIC of model without burn site variables (428.13) is lower than AIC of initial model.
+
+By looking at summary of model and using drop1 likelhood ratio tests, gender, burn type, and percent burned are not significant, but leave in model for reasons in the report.
+
+
+Note: I will do Schoenfeld plots and proportionality tests later on after adding time dependent covariates, since the inclusion of those variables might have an impact on proportionality of current variables (e.g. in a case where there happens to be relationships between these time independent covariates and the incidence of the time dependent covariates which would could confound our findings re: proportionality for the time independent covariates.
+
+## Goodness of fit test
+
+```{r}
+cox.mart <- residuals(cox_no_burnsite,type="martingale")
+cox.cs <- burn1$D3-cox.mart
+
+surv.csr <- survfit(Surv(cox.cs,burn1$D3)~1,type="fleming-harrington")
+
+plot(surv.csr,fun="cumhaz")
+abline(0,1)
+title("Cumulative Hazard of Cox-Snell Residuals: Preliminary Model")
+```
+Fit is medicore, hopefully will improve with addition of time dependent covariates and other changes to model.
+
+
+## See if Percent Burned Needs to be Changed to Categorical
+```{r}
+cox_no_burnsite_no_perc = coxph(burn1.surv~Treatment + Gender + Race + BurnType,data=burn1)
+
+mres <- residuals(cox_no_burnsite_no_perc, type = "martingale")
+
+plot(burn1$PercentBurned,mres,xlab="Percent Burned",ylab="Martingale Residuals")
+lines(lowess(burn1$PercentBurned,mres))
+title("Martingale Residuals vs. Percent Burned")
+```
+
+There is not strong evidence that the percent burned variable should be transformed, since the trend line is approximately straight and there does not appear to be separate chunks of residual points.
+
+Note: I will wait to do outlier analysis until the model is finalized with time dependent covariates and other model changes.
+
+## Time-dependent variable set up
+
+```{r}
+nsubj <- dim(burn1)[1]
+id <- 1:nsubj
+#to identify the subject across multiple lines
+burn1_id <- data.frame(id,burn1)
+
+burn1_td <- tmerge(burn1_id,burn1_id,id=id,tstop=T3)
+
+#set time to excision
+burn1_td  <- tmerge(burn1_td,burn1_id,id=id,excision=tdc(T1))
+
+#set time until  prophylactic antibiotic treatment
+burn1_td  <- tmerge(burn1_td,burn1_id,id=id,antibi=tdc(T2))
+
+status <- as.integer(with(burn1_td,(tstop==T3 & D3)))
+
+#put together
+burn1_td <- data.frame(burn1_td,status)
+
+```
+
+## Run Time Dependent Cox Model
+
+```{r}
+surv_td <- Surv(time=burn1_td$tstart,time2=burn1_td$tstop,event=burn1_td$status,type="counting")
+
+cox_td = coxph(surv_td~Treatment + Gender + Race + PercentBurned + BurnType + excision + antibi,data=burn1_td)
+
+summary(cox_td)
+
+drop1(cox_td)
+
+```
+
+## Check for Proportionality for All Vars
+
+```{r}
+coxzph_td <- cox.zph(cox_td)
+
+# score test
+coxzph_td
+
+# make schoenfeld plots
+for (i in 1:(nrow(coxzph_td$table)-1)){
+  plot(coxzph_td[i], main = paste0("Schoenfeld Residuals for ", coxzph_td[i]$table %>% row.names()))
+}
+
+```
+Score test for whether a linear trend of the residuals has slope 0 with respect to time show that the burn type does not exhibit proportional hazards over time (p=0.028). To deal with this, let us now implement a cox regression model stratified based on burn type, and then determine whether we should assume the coefficients of the non-stratified covariates should be assumed to be the same across each of the strata.
+
+## Implement Stratified Model
+```{r}
+cox_td_strata = coxph(surv_td~Treatment + Gender + Race + PercentBurned + strata(BurnType) + excision + antibi,data=burn1_td)
+
+# Test if coefficients are the same across the strata
+cox_td_strata_interact = coxph(surv_td~ (Treatment + Gender + Race + PercentBurned + excision + antibi)*strata(BurnType) ,data=burn1_td)
+anova(cox_td_strata, cox_td_strata_interact, test = "Chisq")
+
+```
+When we fit interactions with the strata variable, we did not get a significantly improved model (via the likelihood
+ratio test), so we can use the stratified model with coefficients that are the same across strata.
+
+
+## Final Model: Results
+```{r}
+summary(cox_td_strata)
+```
+
+## Final Model: Goodness of Fit
+
+```{r}
+cox.mart.td <- residuals(cox_td_strata,type="martingale")
+cox.cs.td <- burn1_td$status-cox.mart.td
+
+surv.csr.td <- survfit(Surv(cox.cs.td,burn1_td$status)~1,type="fleming-harrington")
+
+plot(surv.csr.td,fun="cumhaz", ylim = c(0,2))
+abline(0,1)
+title("Cumulative Hazard of Cox-Snell Residuals: Final Model")
+```
+
+Fit is better now after adding time dependent variables and stratifying.
+
+## Outlier Analysis
+```{r}
+cox.mart.td <- residuals(cox_td_strata,type="martingale")
+cox.dev.td <- residuals(cox_td_strata,type="deviance")
+cox.dfb.td <- residuals(cox_td_strata,type="dfbeta")
+
+cox.preds.td <- predict(cox_td_strata)
+
+# Martingale
+plot(cox.preds.td,cox.mart.td,xlab="Linear Predictor",
+     ylab="Martingale Residual", pch = 19, cex = 0.5
+     , ylim = c(-1.5,1.5)
+     )
+
+text(cox.preds.td,cox.mart.td+0.1, labels = rownames(burn1_td))
+
+title("Martingale Residuals vs. Linear Predictor")
+```
+The smallest martingale residuals are produced by observations 21, 51, and 111.
+
+```{r}
+# Deviance Residuals
+plot(cox.preds.td,cox.dev.td,xlab="Linear Predictor",ylab="Deviance Residual" 
+     ,ylim = c(-2,4)
+     , pch = 19, cex = 0.5)
+
+title("Deviance Residuals vs. Linear Predictor")
+text(cox.preds.td,cox.dev.td+0.25, labels = rownames(burn1_td))
+```
+
+The largest deviance residuals are from observations 134, 214, 231, and 286.
+
+```{r}
+# dfbeta charts
+spacing = c(0.005, 0.01, 0.05, 0.0002, .015, 0.01)
+ylim_upper = c(0.1, 0.2, 0.2, 0.004, 0.25, 0.2)
+ylim_lower = c(-0.05, -0.08, -1, -0.003, -0.15, -0.2)
+for (i in (1:ncol(cox.dfb.td))) {
+  plot(cox.dfb.td[,i],xlab="Observation Number",ylab=paste0("dfbeta for ", 
+    cox_td_strata$coefficients %>% data.frame() %>% row.names() %>% .[[i]])
+     , ylim=c(ylim_lower[[i]],ylim_upper[[i]])
+     , pch = 19, cex = 0.5)
+
+text(cox.dfb.td[,i]+spacing[[i]], labels = rownames(burn1_td))
+title(paste0("dfbeta Values by Observation Number for ", 
+             cox_td_strata$coefficients %>% data.frame() %>% row.names() %>% .[[i]]))
+}
+```
+
+The largest dfbetas for the Treatment variable (in absolute terms) are from observations 134 and 156.
+The largest dfbetas for the Gender variable (in absolute terms) are from observations 134 and 156.
+The largest dfbetas for the Race variable (in absolute terms) is from observation 214.
+The largest dfbetas for the Percent Burned variable (in absolute terms) are from observations 71, 92, 108, and 111.
+The largest dfbetas for the time dependent excision variable (in absolute terms) are from observations 158 and 160.
+The largest dfbetas for the time dependent antibiotic variable (in absolute terms) are from observations 70 and 231.
+
+The most important observations (in the expanded event-patient level dataset) to examine are the ones in the martingale and deviance plots 21, 51, 111, 134, 214, 231, and 286, as well as additional ones that show up multiple times in the dfbeta plots: 156.
+
+```{r}
+unusualpts <- c(21, 51, 111, 134, 214, 231, 286, 156)
+examine = burn1_td[unusualpts,]
+examine
+```
+
+For 21, 51, and 111, these patients had no infection despite getting routine treatment.
+For 134, 214, 231, 286, and 156 these patients had an infection in a short amount of time despite getting cleansing treatment and having other covariate values that would decrease infection risk.
+
