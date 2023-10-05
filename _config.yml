@@ -1,11 +1,11 @@
 title: Christopher Li # your name (or website title) here
 logo: "/images/profile_pic.jpg?raw=true" # your photo (or logo) here
 description: > # your text below (remove <br> elements if you don't need line breaks)
-  First description 
+  Sports Analytics Projects Using Python
   <br><br>
-  Second description 
+  Biostatistics Projects Using R
   <br><br>
-  <a href="https://www.linkedin.com/in/example/">View My LinkedIn Profile</a> 
+  <a href="https://www.https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a> 
   
 remote_theme: pages-themes/minimal@v0.2.0
 plugins:
