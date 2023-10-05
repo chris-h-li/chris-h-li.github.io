@@ -16,7 +16,7 @@
 ### Biostatistics Projects Using R
 
 [Evaluating the Relationship Between Visual Stimuli and Neural Activity in the Visual Cortex in Mice](/html/neural_activity_in_mice_project.html)
-<img src="images/neural_thumbnail.jpg?raw=true"/>
+<img src="images/neurons_thumbnail.jpg?raw=true"/>
 
 ---
 [Evaluating the Effect of Body Washing Using Chlorhexidine
