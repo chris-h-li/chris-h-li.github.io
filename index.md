@@ -10,6 +10,7 @@
 ---
 
 [In Progress: Assessing NHL Players' Offensive Talent Using A Linemate-Adjusted Metric](/pdf/nhl_project.pdf)
+
 <img src="images/jason_robertson.jpg?raw=true"/>
 
 ---
