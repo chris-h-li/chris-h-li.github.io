@@ -4,6 +4,11 @@
 
 ### Sports Analytics Projects Using Python
 
+[Stathletes 2024 Big Data Cup Submission (Finalist): A Recurrent Neural Network Model that Quantifies Players’ Contributions to Zone Entries and Exits](/pdf/big_data_cup_paper.pdf)
+<img src="images/zone_entry_chart.png?raw=true"/>
+
+---
+
 [Clustering and Prediction of NBA Player Performance: A Machine Learning Approach](/pdf/nba_prediction_project.pdf)
 <img src="images/nba_thumbnail.jpg?raw=true"/>
 
