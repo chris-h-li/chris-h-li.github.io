@@ -9,7 +9,7 @@
 
 ---
 
-[In Progress: Improving Upon Existing RAPM Models for NHL Player Evaluation by Using Informative Priors in a Bayesian Hierarchial Model](/pdf/nhl_project_summary.pdf)
+[In Progress: Improving Upon Existing RAPM Models for NHL Player Evaluation by Using Informative Priors in a Bayesian Hierarchial Model]
 
 <img src="images/jason_robertson.jpg?raw=true"/>
 
