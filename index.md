@@ -1,7 +1,5 @@
 ## Portfolio
 
----
-
 ### Sports Analytics Projects Using Python
 
 [Stathletes 2024 Big Data Cup Submission (Finalist): A Recurrent Neural Network Model that Quantifies Hockey Players’ Contributions to Zone Entries and Exits](/pdf/big_data_cup_paper.pdf)
