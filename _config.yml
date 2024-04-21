@@ -2,11 +2,11 @@ title: Christopher Li # your name (or website title) here
 logo: "/images/profile_pic.jpg?raw=true" # your photo (or logo) here
 description: > # your text below (remove <br> elements if you don't need line breaks)
   I graduated with an MS in Statistics from UC Davis in December 2023 and am currently working on the Data Science and Innovation team at Evolent. I enjoy applying statistical and machine learning models 
-  to answer interesting questions in healthcare and sports, and I am passionate about hockey analytics. In addition, I have a specific interest in working with sequential models 
-  and Bayesian hierarchial models, so in my free time I have been using these methods to develop innovative ways of evaluating professional hockey players. 
-  Recently I entered the 2024 Big Data Cup competition hosted by Stathletes, and my submission was selected 
-  as a finalist (still awaiting final results). This website also contains projects I have done as part of my MS degree.  I have completed many other statistical analyses (regressions,
-  Monte Carlo simulations, conjoint analyses, etc.) during my 3+ years of work experience at Cornerstone Research and Takeda Pharmaceuticals.
+  to answer interesting questions in healthcare and sports, and I am passionate about hockey analytics. In April 2024, I won the 2024 Big Data Cup hockey analytics competition hosted by Stathletes. 
+  I have a specific interest in working with sequential (e.g. RNN)
+  and Bayesian models, so in my free time I have been using these methods to develop innovative ways of evaluating professional hockey players, which are featured on my website.
+  This site also contains my projects I have done as part of my MS degree.  I have plenty of other statistical experience (regressions,
+  Monte Carlo simulations, conjoint analyses, etc.) from my 3+ years of work experience at Cornerstone Research and Takeda Pharmaceuticals.
   <br><br>
   <a href="https://www.linkedin.com/in/christopher-li-571679112/">View My LinkedIn Profile</a>
   
