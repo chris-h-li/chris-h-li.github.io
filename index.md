@@ -2,7 +2,7 @@
 
 ### Sports Analytics Projects Using Python
 
-[Stathletes 2024 Big Data Cup Submission (Winner): A Recurrent Neural Network Model that Quantifies Hockey Players’ Contributions to Zone Entries and Exits](/pdf/big_data_cup_paper.pdf)
+[Winning Submission for Stathletes 2024 Big Data Cup: A Recurrent Neural Network Model that Quantifies Hockey Players’ Contributions to Zone Entries and Exits](/pdf/big_data_cup_paper.pdf)
 <img src="images/zone_entry_chart.png?raw=true"/>
 
 ---
