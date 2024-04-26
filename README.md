@@ -1,6 +1,6 @@
 ## Repository Overview
 
-This repository contains the files used to build out my portfolio website located at chris-h-li.github.io.
+This repository contains the files used to build out my portfolio website located at https://chris-h-li.github.io/.
 
 In the project_code folder, one can find the Python and R code files used for the analyses presented on my website.
 
